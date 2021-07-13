@@ -2,7 +2,6 @@
 yum install epel-release -y
 yum install ansible -y
 yum install -y yum-utils
-yum install -y rust
 yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
 yum install docker-ce docker-ce-cli containerd.io -y
 systemctl start docker
@@ -11,6 +10,7 @@ yum install wget -y
 yum install unzip -y
 yum install -y python3
 yum install -y python
+pip3 install --upgrade pip
 pip3 install docker-compose
 mkdir /var/lib/pgdocker
 wget https://github.com/ansible/awx/archive/refs/tags/15.0.1.zip
