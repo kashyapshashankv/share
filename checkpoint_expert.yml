@@ -1,0 +1,19 @@
+---
+- name: Execute commands on Check Point in expert mode
+  hosts: checkpoint
+  gather_facts: no
+  vars:
+    ansible_user: "your_username"
+    ansible_ssh_pass: "your_password"
+    ansible_become_pass: "your_expert_mode_password"
+  tasks:
+    - name: Enter expert mode
+      ansible.builtin.shell: |
+        expert
+        echo "{{ ansible_become_pass }}"
+      register: expert_mode
+      changed_when: false
+
+    - name: Execute command in expert mode
+      ansible.builtin.shell: "your_command_here"
+      when: expert_mode is succeeded
