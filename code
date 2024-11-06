@@ -1,0 +1,72 @@
+import requests
+import json
+import time
+from prometheus_client import start_http_server, Gauge
+
+# FMC server details
+FMC_IP = 'your_fmc_ip'
+USERNAME = 'your_username'
+PASSWORD = 'your_password'
+API_PORT = 8000  # Port where Prometheus will scrape the metrics
+SCRAPE_INTERVAL = 60  # Interval in seconds to collect metrics
+
+# Define Prometheus Gauges
+device_health_gauge = Gauge('fmc_device_health_status', 'Device health status of FMC devices', ['device_name'])
+
+# Function to get authentication token
+def get_auth_token():
+    token_url = f"https://{FMC_IP}/api/fmc_platform/v1/auth/generatetoken"
+    headers = {'Content-Type': 'application/json'}
+    
+    try:
+        response = requests.post(token_url, headers=headers, auth=(USERNAME, PASSWORD), verify=False)
+        if response.status_code in [201, 204]:
+            token = response.headers.get('X-auth-access-token')
+            print("Token obtained successfully.")
+            return token
+        else:
+            raise Exception(f"Failed to obtain token: {response.text}")
+    except requests.exceptions.RequestException as e:
+        print(f"Error obtaining token: {e}")
+        return None
+
+# Function to get device health data
+def get_device_health_data(token):
+    url = f"https://{FMC_IP}/api/fmc_config/v1/domain/default/health/monitoring"
+    headers = {'X-auth-access-token': token, 'Content-Type': 'application/json'}
+
+    try:
+        response = requests.get(url, headers=headers, verify=False)
+        if response.status_code == 200:
+            print("Device health data fetched successfully.")
+            return response.json()
+        else:
+            print(f"Failed to fetch device health data: {response.text}")
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching device health data: {e}")
+        return None
+
+# Function to collect metrics and update Prometheus Gauges
+def collect_metrics():
+    token = get_auth_token()
+    if token:
+        device_health_data = get_device_health_data(token)
+        if device_health_data:
+            for device in device_health_data.get('items', []):
+                device_name = device.get('name', 'unknown_device')
+                health_status = device.get('status', 0)  # Assume 'status' is numeric, adjust as needed
+                device_health_gauge.labels(device_name=device_name).set(health_status)
+        else:
+            print("No device health data to update.")
+    else:
+        print("No token available for data collection.")
+
+# Start HTTP server and periodically update metrics
+if __name__ == '__main__':
+    start_http_server(API_PORT)
+    print(f"Prometheus metrics server started on port {API_PORT}")
+
+    while True:
+        collect_metrics()
+        time.sleep(SCRAPE_INTERVAL)
