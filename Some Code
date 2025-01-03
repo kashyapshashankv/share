@@ -38,3 +38,8 @@ if upload_response.status_code == 200:
     print("File uploaded successfully:", upload_response.json())
 else:
     print("File upload failed:", upload_response.text)
+
+
+curl -v -k -X POST "https://<mgmt-server>:443/web_api/add-repository-package" \
+-H "X-chkp-sid: your-session-id" \
+-F "file=@path/to/your/package-file.tar"
