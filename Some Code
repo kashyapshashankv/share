@@ -1,0 +1,40 @@
+import requests
+
+# Replace with your actual values
+mgmt_server = "<mgmt-server>"
+port = "<port>"
+username = "admin"
+password = "your-password"
+file_path = "path/to/your/package-file.tar"
+
+# Login to get session_id
+login_url = f"https://{mgmt_server}:{port}/web_api/login"
+login_data = {
+    "user": username,
+    "password": password
+}
+
+response = requests.post(login_url, json=login_data, verify=False)
+if response.status_code == 200:
+    session_id = response.json().get("sid")
+    print("Login successful. Session ID:", session_id)
+else:
+    print("Login failed:", response.text)
+    exit()
+
+# Upload the file
+upload_url = f"https://{mgmt_server}:{port}/web_api/add-repository-package"
+headers = {
+    "X-chkp-sid": session_id
+}
+
+with open(file_path, "rb") as file:
+    files = {
+        "file": file
+    }
+    upload_response = requests.post(upload_url, headers=headers, files=files, verify=False)
+
+if upload_response.status_code == 200:
+    print("File uploaded successfully:", upload_response.json())
+else:
+    print("File upload failed:", upload_response.text)
