@@ -1,0 +1,136 @@
+{
+  "variables": {
+    "aws_region": "us-east-1",
+    "instance_type": "t2.micro",
+    "ami_name": "custom-ami-with-partitions-{{timestamp}}",
+    "source_ami": "ami-0c02fb55956c7d316"  // Amazon Linux 2 AMI (example)
+  },
+  "builders": [
+    {
+      "type": "amazon-ebs",
+      "region": "{{user `aws_region`}}",
+      "instance_type": "{{user `instance_type`}}",
+      "source_ami": "{{user `source_ami`}}",
+      "ssh_username": "ec2-user",
+      "ami_name": "{{user `ami_name`}}"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell",
+      "inline": [
+        "sudo mkdir -p /mnt/partitions",
+        "sudo parted /dev/xvda --script mklabel gpt",
+        "sudo parted /dev/xvda --script mkpart primary ext4 1MiB 20%",
+        "sudo parted /dev/xvda --script mkpart primary ext4 20% 40%",
+        "sudo parted /dev/xvda --script mkpart primary ext4 40% 60%",
+        "sudo mkfs.ext4 /dev/xvda1",
+        "sudo mkfs.ext4 /dev/xvda2",
+        "sudo mkfs.ext4 /dev/xvda3",
+        "sudo mkdir /mnt/var && sudo mount /dev/xvda1 /mnt/var",
+        "sudo mkdir /mnt/opt && sudo mount /dev/xvda2 /mnt/opt",
+        "sudo mkdir /mnt/data && sudo mount /dev/xvda3 /mnt/data",
+        "echo '/dev/xvda1 /var ext4 defaults 0 2' | sudo tee -a /etc/fstab",
+        "echo '/dev/xvda2 /opt ext4 defaults 0 2' | sudo tee -a /etc/fstab",
+        "echo '/dev/xvda3 /data ext4 defaults 0 2' | sudo tee -a /etc/fstab"
+      ]
+    }
+  ]
+}
+
+
+
+
+
+# Partitioning
+clearpart --all --initlabel
+part /boot --fstype ext4 --size=500
+part /var --fstype ext4 --size=2000
+part /opt --fstype ext4 --size=2000
+part swap --size=1024
+part / --fstype ext4 --size=10000
+
+# Bootloader
+bootloader --location=mbr
+
+# Root Password
+rootpw myrootpassword
+
+# Other options
+reboot
+
+
+{
+  "builders": [
+    {
+      "type": "amazon-ebs",
+      "region": "us-east-1",
+      "source_ami": "ami-0c02fb55956c7d316",  // Base AMI
+      "instance_type": "t2.micro",
+      "ssh_username": "ec2-user",
+      "ami_name": "custom-ami-with-partitions-{{timestamp}}",
+      "user_data_file": "./ks.cfg"
+    }
+  ]
+}
+
+
+
+
+#!/bin/bash
+# Cloud-Init Userdata for Partitioning and Formatting
+
+# Create partitions
+parted /dev/xvda --script mklabel gpt
+parted /dev/xvda --script mkpart primary ext4 1MiB 20%
+parted /dev/xvda --script mkpart primary ext4 20% 40%
+parted /dev/xvda --script mkpart primary ext4 40% 60%
+
+# Format partitions
+mkfs.ext4 /dev/xvda1
+mkfs.ext4 /dev/xvda2
+mkfs.ext4 /dev/xvda3
+
+# Create directories and mount partitions
+mkdir -p /var /opt /data
+mount /dev/xvda1 /var
+mount /dev/xvda2 /opt
+mount /dev/xvda3 /data
+
+# Update /etc/fstab for persistence
+echo '/dev/xvda1 /var ext4 defaults 0 2' >> /etc/fstab
+echo '/dev/xvda2 /opt ext4 defaults 0 2' >> /etc/fstab
+echo '/dev/xvda3 /data ext4 defaults 0 2' >> /etc/fstab
+
+
+
+
+{
+  "builders": [
+    {
+      "type": "amazon-ebs",
+      "region": "us-east-1",
+      "source_ami": "ami-0c02fb55956c7d316",  // Base AMI
+      "instance_type": "t2.micro",
+      "ssh_username": "ec2-user",
+      "ami_name": "custom-ami-with-partitions-{{timestamp}}",
+      "user_data_file": "./cloud-init.sh"
+    }
+  ]
+}
+
+
+{
+  "builders": [
+    {
+      "type": "amazon-ebs",
+      "region": "us-east-1",
+      "source_ami": "ami-0c02fb55956c7d316",  // Base AMI
+      "instance_type": "t2.micro",
+      "ssh_username": "ec2-user",
+      "ssh_keypair_name": "my-key-pair",          // Specify the key pair name
+      "ssh_private_key_file": "~/.ssh/my-key.pem", // Path to the private key file
+      "ami_name": "custom-ami-with-partitions-{{timestamp}}"
+    }
+  ]
+}
