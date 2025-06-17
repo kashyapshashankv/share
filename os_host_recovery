@@ -1,0 +1,66 @@
+import requests
+
+# STEP 1: Authentication
+auth_url = "https://<keystone-host>/v3/auth/tokens"
+username = "admin"
+password = "your_admin_password"
+user_domain = "Default"
+project_domain = "Default"
+
+# System-scoped auth payload (OpenStack API v3)
+auth_payload = {
+    "auth": {
+        "identity": {
+            "methods": ["password"],
+            "password": {
+                "user": {
+                    "name": username,
+                    "domain": {"name": user_domain},
+                    "password": password
+                }
+            }
+        },
+        "scope": {
+            "system": {"all": True}
+        }
+    }
+}
+
+headers = {"Content-Type": "application/json"}
+response = requests.post(auth_url, json=auth_payload, headers=headers)
+
+if response.status_code != 201:
+    raise Exception(f"Auth failed: {response.status_code} {response.text}")
+
+# Extract token and service catalog
+token = response.headers["X-Subject-Token"]
+catalog = response.json()["token"]["catalog"]
+
+# STEP 2: Find the Nova endpoint (public interface)
+nova_url = None
+for service in catalog:
+    if service["type"] == "compute":
+        for endpoint in service["endpoints"]:
+            if endpoint["interface"] == "public":
+                nova_url = endpoint["url"]
+                break
+
+if not nova_url:
+    raise Exception("Nova endpoint not found.")
+
+# STEP 3: Call the /os-hypervisors/detail endpoint
+hypervisors_url = f"{nova_url}/os-hypervisors/detail"
+nova_headers = {
+    "X-Auth-Token": token
+}
+
+res = requests.get(hypervisors_url, headers=nova_headers)
+
+if res.status_code != 200:
+    raise Exception(f"Failed to get hypervisors: {res.status_code} {res.text}")
+
+hypervisors = res.json().get("hypervisors", [])
+
+# Print all compute hosts
+for h in hypervisors:
+    print(f"Host: {h['hypervisor_hostname']} - State: {h['state']} - Status: {h['status']}")
