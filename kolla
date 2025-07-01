@@ -1,0 +1,76 @@
+---
+- name: Customize VM SMBIOS info in Kolla
+  hosts: compute
+  become: true
+
+  vars:
+    manufacturer: "Acme Corp"
+    model: "Model X1000"
+
+  tasks:
+
+    - name: Ensure nova config directory exists
+      file:
+        path: /etc/kolla/config/nova
+        state: directory
+        mode: '0755'
+
+    - name: Override nova-compute.conf for SMBIOS support
+      ini_file:
+        path: /etc/kolla/config/nova/nova-compute.conf
+        section: libvirt
+        option: sysinfo_serial
+        value: hardware
+        mode: '0644'
+
+    - name: Create QEMU hook script inside nova_libvirt container
+      copy:
+        dest: /etc/kolla/tmp_qemu_hook.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          mkdir -p /etc/libvirt/hooks
+          cat << 'EOF' > /etc/libvirt/hooks/qemu
+          #!/bin/bash
+
+          GUEST_NAME="$1"
+          HOOK_NAME="$2"
+          STATE="$3"
+          SUBSTATE="$4"
+
+          if [ "$HOOK_NAME" = "prepare" ] && [ "$STATE" = "begin" ]; then
+              TMP_XML="/tmp/${GUEST_NAME}.xml"
+              virsh dumpxml "$GUEST_NAME" > "$TMP_XML"
+
+              if ! grep -q "<sysinfo" "$TMP_XML"; then
+                  sed -i '/<devices>/i \
+          <sysinfo type="smbios">\
+            <system>\
+              <entry name="manufacturer">'"${manufacturer}"'</entry>\
+              <entry name="product">'"${model}"'</entry>\
+            </system>\
+          </sysinfo>' "$TMP_XML"
+
+                  virsh define "$TMP_XML"
+              fi
+          fi
+          EOF
+          chmod +x /etc/libvirt/hooks/qemu
+
+    - name: Copy hook into nova_libvirt container
+      command: docker cp /etc/kolla/tmp_qemu_hook.sh nova_libvirt:/tmp/
+      args:
+        warn: false
+
+    - name: Run the hook script inside nova_libvirt
+      command: docker exec nova_libvirt bash /tmp/tmp_qemu_hook.sh
+
+    - name: Clean up temp script
+      file:
+        path: /etc/kolla/tmp_qemu_hook.sh
+        state: absent
+
+    - name: Restart nova_libvirt and nova_compute containers
+      shell: |
+        docker restart nova_libvirt
+        docker restart nova_compute
