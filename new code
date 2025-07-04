@@ -1,0 +1,22 @@
+resource "null_resource" "wait_for_winrm" {
+  depends_on = [openstack_compute_instance_v2.vm]
+
+  provisioner "remote-exec" {
+    inline = ["echo WinRM is ready"]
+
+    connection {
+      type            = "winrm"
+      host            = openstack_compute_instance_v2.vm.access_ip_v4
+      user            = "terraformUser"
+      password        = "P@ssw0rd!"
+      port            = 5985
+      timeout         = "5m"
+      https           = false
+      insecure        = true
+    }
+
+    # Retry logic to wait for WinRM to be ready
+    retry_delay = "10s"
+    retries     = 30
+  }
+}
